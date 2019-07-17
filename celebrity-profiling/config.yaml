@@ -1,0 +1,30 @@
+#
+# Will download the latest up to 3000 tweets from each celebrity timeline. Contact authors for archived version.
+#
+### Method for timeline aggregation.
+# "complete" - create one file per celebrity, one tweet per line
+# "compact" - store tweet-texts and selected user info. Creates only one file, one author per line with:
+#  {"id": int, "screen_name": str, "name": str,  "followers_count": int, "lang": str, timeline": [tweets, ...]}
+# aggregation: "compact"
+#
+### Also download the user information explicitly and store separately
+# add_user_info: true
+#
+### Where this dehydrated distribution file is, standard assumes this directory
+# input_file: "./webis-celebrity-corpus-2019-distribution.ndjson"
+#
+### Path where the hydrated corpus should be stored
+# output_path: "./hydrated"
+#
+### Twitter account credentials to be used
+# The hydrator will switch keys at rate limit, if multiple accounts are given
+twitter_accounts:
+  - consumer_key: "my-consumer-key"
+    consumer_secret: "my-consumer-secret"
+    access_key: "my-access-key"
+    access_secret: "my-access-secret"
+#
+### Contact
+# Matti Wiegmann - matti.wiegmann[at]uni-weimar.de
+# Martin Potthast - martin.potthast[at]uni-leipzig.de
+# Benno Stein - benno.stein[at]uni-weimar.de

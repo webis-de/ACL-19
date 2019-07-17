@@ -1,0 +1,8 @@
+*.pyc
+__pycache__/
+
+hydrated/
+*.ndjson
+*.json
+
+*.iml

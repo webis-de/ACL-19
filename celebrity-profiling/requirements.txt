@@ -1,0 +1,2 @@
+pyyaml>=5.1
+tweepy>=3.7.0
