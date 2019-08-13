@@ -13,7 +13,7 @@ from math import inf
 
 def setup_environment(_config: dict):
     """ make sure the files and paths required are available """
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(format='%(asctime)s:%(levelname)s: %(message)s', level=logging.INFO)
     logging.info("Setup Environment")
 
     _input_file = Path(_config.get("input_file", "./webis-celebrity-corpus-2019-distribution.ndjson"))
@@ -55,7 +55,7 @@ def hydrate(input_file: Path, output_path: Path, accounts: list, aggregation: st
     logging.info("Start hydration with %s accounts, \nReading from %s \nWriting output to %s",
                  len(accounts), input_file, output_path)
     for user_data, timeline in download_users(input_file, accounts):
-
+        logging.info("Start aggregation")
         if aggregation == "complete":
             open(str(output_path / "users.ndjson"), "a").write(
                 json.dumps(user_data) + "\n")
@@ -85,7 +85,7 @@ def get_api(accounts: list, limit_type: tuple = None):
         # there is only one account, so we don't consider account switching to circumvent rate limits
         auth = OAuthHandler(accounts[0]["consumer_key"], accounts[0]["consumer_secret"])
         auth.set_access_token(accounts[0]["access_key"], accounts[0]["access_secret"])
-        return API(auth, wait_on_rate_limit=True)
+        return API(auth, wait_on_rate_limit=True, wait_on_rate_limit_notify=True)
 
     lowest_to_reset = inf
     for account in accounts:
@@ -93,9 +93,9 @@ def get_api(accounts: list, limit_type: tuple = None):
         auth.set_access_token(account["access_key"], account["access_secret"])
         twitter = API(auth)
         rate_limit = twitter.rate_limit_status()
-        if rate_limit['resources'][rate_limit[0]][rate_limit[1]]["remaining"] > 0:
+        if rate_limit['resources'][limit_type[0]][limit_type[1]]["remaining"] > 0:
             return twitter
-        lowest_to_reset = min(lowest_to_reset, rate_limit['resources'][rate_limit[0]][rate_limit[1]]["reset"])
+        lowest_to_reset = min(lowest_to_reset, rate_limit['resources'][limit_type[0]][limit_type[1]]["reset"])
     else:
         logging.info("all rate limits reached, sleeping %s ms until reset", lowest_to_reset)
         sleep(lowest_to_reset / 1000)
