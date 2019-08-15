@@ -21,8 +21,9 @@
 twitter_accounts:
   - consumer_key: "my-consumer-key"
     consumer_secret: "my-consumer-secret"
-    access_key: "my-access-key"
-    access_secret: "my-access-secret"
+    user_auth:
+      - access_key: "my-access-key"
+        access_secret: "my-access-secret"
 #
 ### Contact
 # Matti Wiegmann - matti.wiegmann[at]uni-weimar.de

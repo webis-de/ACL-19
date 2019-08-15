@@ -4,11 +4,11 @@ import json
 from pathlib import Path
 import yaml
 from tweepy.api import API
-from tweepy import OAuthHandler, RateLimitError, Cursor
-from tweepy.error import TweepError
-from time import sleep
+from tweepy import OAuthHandler, Cursor, AppAuthHandler
 import logging
-from math import inf
+import concurrent.futures
+from queue import Queue
+from functools import partial
 
 
 def setup_environment(_config: dict):
@@ -31,14 +31,75 @@ def setup_environment(_config: dict):
     return _input_file, _output_path
 
 
-def download_users(input_file, accounts):
-    for user in open(str(input_file), "r"):
-        u = json.loads(user)
-        logging.info("getting timeline for user %s" % u["id"])
-        try:
-            yield get_user(u["id"], accounts), get_timeline(u["id"], accounts)
-        except TweepError:
-            logging.info("user %s not available" % u["id"])
+def get_api_pool(account_config: list) -> Queue:
+    """ generates tweepy.api objects for all app and user authentications given in the config """
+    account_pool = Queue()
+    for account in account_config:
+        app_token = account["consumer_key"]
+        app_secret = account["consumer_secret"]
+
+        # add app auth
+        app_auth = AppAuthHandler(app_token, app_secret)
+        account_pool.put(API(app_auth, wait_on_rate_limit=True))
+
+        # add all user auth for this app
+        for user_auth in account["user_auth"]:
+            auth = OAuthHandler(app_token, app_secret)
+            auth.set_access_token(user_auth["access_key"], user_auth["access_secret"])
+            account_pool.put(API(auth, wait_on_rate_limit=True))
+
+    return account_pool
+
+
+def get_celebrity_worker(user: str, api_queue: Queue):
+    """ Worker to download user description and timeline """
+    user_id = json.loads(user)["id"]
+    twitter_api = api_queue.get()
+    status = "Done"
+
+    logging.info("getting timeline for user %s" % user_id)
+    try:
+        user_response = twitter_api.get_user(user_id)._json
+        timeline_response = [status._json for status in
+                             Cursor(twitter_api.user_timeline, id=user_id, tweet_mode='extended').items()]
+    except Exception as e:
+        logging.exception("failed %d due to: %s", user_id, str(e))
+        status = str(e)
+        user_response = None
+        timeline_response = None
+
+    api_queue.put(twitter_api)
+    return user_id, status, user_response, timeline_response
+
+
+def store_response(job_result: tuple, output_path: Path, aggregation: str):
+    """
+    Write the results to output_path, based on the given aggregation method. Logs the results here, skips failed requests
+    (i.e. because of deleted, private accounts)
+    :param job_result: Tuple given from celebrity_workers with (user_id, status_string, user_json, timeline_list)
+    :param output_path: Where to write results
+    :param aggregation: method of agg. given in the config
+    """
+    open("log.txt", "a+").write("{},{}\n".format(job_result[0], job_result[1]))
+    if job_result[2] is None or job_result[3] is None:
+        return
+
+    if aggregation == "complete":
+        open(str(output_path / "users.ndjson"), "a").write(
+            json.dumps(job_result[2]) + "\n")
+        open(str(output_path / "timelines" / ("%s.ndjson" % job_result[0])), "w").writelines([
+            json.dumps(tweet) + "\n" for tweet in job_result[3]
+        ])
+    elif aggregation == "compact":
+        open(str(output_path / "webis-celebrity-corpus-2019-hydrated.ndjson"), "a").write(
+            json.dumps({"id": job_result[0], "statuses_count": job_result[2]["statuses_count"],
+                        "screen_name": job_result[2]["screen_name"], "lang": job_result[2]["lang"],
+                        "followers_count": job_result[2]["followers_count"], "name": job_result[2]["name"],
+                        "timeline": [t["full_text"] for t in job_result[3]]}) + "\n"
+        )
+    else:
+        logging.exception("Invalid aggregation method in the config, exiting")
+        exit(1)
 
 
 def hydrate(input_file: Path, output_path: Path, accounts: list, aggregation: str):
@@ -52,71 +113,14 @@ def hydrate(input_file: Path, output_path: Path, accounts: list, aggregation: st
     :param aggregation: "file_wise" one file per author, one line per tweet
                         "compact" one file, one author per line
     """
+    api_pool = get_api_pool(accounts)
     logging.info("Start hydration with %s accounts, \nReading from %s \nWriting output to %s",
-                 len(accounts), input_file, output_path)
-    for user_data, timeline in download_users(input_file, accounts):
-        logging.info("Start aggregation")
-        if aggregation == "complete":
-            open(str(output_path / "users.ndjson"), "a").write(
-                json.dumps(user_data) + "\n")
-            open(str(output_path / "timelines" / ("%s.ndjson" % user_data["id"])), "w").writelines([
-                json.dumps(tweet) + "\n" for tweet in timeline
-            ])
-        elif aggregation == "compact":
-            open(str(output_path / "webis-celebrity-corpus-2019-hydrated.ndjson"), "a").write(
+                 api_pool.qsize(), input_file, output_path)
 
-                json.dumps({"id": user_data["id"], "statuses_count": user_data["statuses_count"],
-                            "screen_name": user_data["screen_name"], "lang": user_data["lang"],
-                            "followers_count": user_data["followers_count"], "name": user_data["name"],
-                            "timeline": [t["full_text"] for t in timeline]}) + "\n"
-            )
-        else:
-            logging.exception("Invalid aggregation method in the config, exiting")
-            exit(1)
-
-
-def get_api(accounts: list, limit_type: tuple = None):
-    """
-    return a tweepy api element, based on which account has a free limit.
-    If non is free, sleep here until it is.
-    If there is only one account configured, wait via tweepy
-    """
-    if len(accounts) == 1:
-        # there is only one account, so we don't consider account switching to circumvent rate limits
-        auth = OAuthHandler(accounts[0]["consumer_key"], accounts[0]["consumer_secret"])
-        auth.set_access_token(accounts[0]["access_key"], accounts[0]["access_secret"])
-        return API(auth, wait_on_rate_limit=True, wait_on_rate_limit_notify=True)
-
-    lowest_to_reset = inf
-    for account in accounts:
-        auth = OAuthHandler(account["consumer_key"], account["consumer_secret"])
-        auth.set_access_token(account["access_key"], account["access_secret"])
-        twitter = API(auth)
-        rate_limit = twitter.rate_limit_status()
-        if rate_limit['resources'][limit_type[0]][limit_type[1]]["remaining"] > 0:
-            return twitter
-        lowest_to_reset = min(lowest_to_reset, rate_limit['resources'][limit_type[0]][limit_type[1]]["reset"])
-    else:
-        logging.info("all rate limits reached, sleeping %s ms until reset", lowest_to_reset)
-        sleep(lowest_to_reset / 1000)
-        return get_api(accounts, limit_type)
-
-
-def get_user(user_id: int, accounts: list):
-    """ Get the latest Twitter user object of a given user_id and return. """
-    twitter = get_api(accounts, ('users', '/users/show/:id'))
-    return twitter.get_user(user_id)._json
-
-
-def get_timeline(user_id: int, accounts: list):
-    """ Get the latest Twitter timeline of the given user as a list of status responses. """
-    twitter = get_api(accounts, ('statuses', '/statuses/user_timeline'))
-    try:
-        return [status._json for status in Cursor(twitter.user_timeline, id=user_id, tweet_mode='extended').items()]
-    except RateLimitError as e:
-        logging.warning("RateLimitError while downloading a timeline, will try again with a different account. "
-                        "This may be a common event.", e)
-        return get_timeline(user_id, accounts)
+    job = partial(get_celebrity_worker, api_queue=api_pool)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=api_pool.qsize()) as executor:
+        for job_result in executor.map(job, open(str(input_file), "r")):
+            store_response(job_result, output_path, aggregation)
 
 
 if __name__ == "__main__":
