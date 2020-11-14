@@ -22,7 +22,7 @@ Bevendorff, Potthast, Hagen, Stein
       year =                2019
     }
   
-[[Paper Link](https://webis.de/downloads/publications/papers/stein_2019m.pdf)] [[Code](https://github.com/webis-de/heuristic-authorship-obfuscation)]
+[[Paper Link](https://webis.de/downloads/publications/papers/stein_2019m.pdf)] [[Code](https://github.com/webis-de/acl19-heuristic-authorship-obfuscation)]
 
 ### Bias Analysis and Mitigation in the Evaluation of Authorship Verification
 Bevendorff, Stein, Hagen, Potthast
