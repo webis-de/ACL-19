@@ -1,10 +1,12 @@
+**2023 Data Update:** Twitter API is defunct. 
+Download the data directly: https://files.webis.de/data-in-progress/data-research/social-media-analysis/acl19-celebrity-profiling/
+Download subsets: https://pan.webis.de/data.html?q=celebrity+profiling 
+
 # Celebrity Profiling
 
 This repository contains the data and code for reproducing results of the paper:
 
 Matti Wiegmann, Benno Stein, and Martin Potthast. <a href="http://www.uni-weimar.de/medien/webis/publications/papers/stein_2018n.pdf" class="paper"><span class="title">Celebrity Profiling</span></a>. In <span class="booktitle">Proceedings of 57th Annual Meeting of the Association for Computational Linguistics (ACL 19)</span>, <span class="month">August</span> <span class="year">2019</span> 
-
-**Note:** In light of the current changes at Twitter, the hydration method we use to distribute the data may fail soon. In that case, please contact us for an archived version of the dataset, or use any of the subsets at https://pan.webis.de/data.html?q=celebrity-profiling. 
 
 ### Repository Overview
 
