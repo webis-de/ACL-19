@@ -1,8 +1,8 @@
+# Celebrity Profiling
+
 **2023 Data Update:** Twitter API is defunct. 
 Download the data directly: https://files.webis.de/data-in-progress/data-research/social-media-analysis/acl19-celebrity-profiling/
 Download subsets: https://pan.webis.de/data.html?q=celebrity+profiling 
-
-# Celebrity Profiling
 
 This repository contains the data and code for reproducing results of the paper:
 
